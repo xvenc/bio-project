@@ -152,6 +152,7 @@ if __name__ == "__main__":
         # procimg.show_all_transformations()
         processed.append((img, processed_data)) # Store the processed data for vein extraction
 
+    # Extract and display extracted veins for each preprocessed image
     for (img_name, img_and_mask) in processed:
         extractor.extract(E, img_and_mask)
         extractor.show_veins(img_name)
