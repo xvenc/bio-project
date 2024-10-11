@@ -1,8 +1,8 @@
 import matplotlib.pyplot as plt
 import numpy as np
+import bob.bio.vein.extractor as be
+import bob.bio.vein.preprocessor as bp
 from PIL import Image
-from bob.bio.vein.extractor import RepeatedLineTracking
-from bob.bio.vein.preprocessor import LeeMask, FixedCrop, HuangNormalization, HistogramEqualization
 
 class ImagePreprocessor():
     """A class used to represent and process an image through various transformations."""
@@ -108,51 +108,62 @@ class VeinExtractor():
         list(map(lambda ax: ax.axis('off'), axes.flatten()))
         plt.show()
 
+
+# Preprocessing functions
 def preprocess_1():
     """
     This preprocessing function uses fixed cropping to remove the top and bottom 30 pixels of the image,
-    Lee mask to extract the mask of the finger, Huang normalization to normalize the image and mask (center them),
-    and histogram equalization to enhance the contrasts of the image.
+    Lee mask to extract the mask of the finger (I found this mask to work the best), no normalization, and no additional filtering.
     """
-    cropper = FixedCrop(top=30, bottom=30)
-    masker = LeeMask()
-    normalizer = HuangNormalization()
-    filter = HistogramEqualization()
+    cropper = bp.FixedCrop(top=30, bottom=30)
+    masker = bp.LeeMask()
+    normalizer = bp.NoNormalization()
+    filter = bp.NoFilter()
     return cropper, masker, normalizer, filter
 
-def extract_1():
+def preprocess_2():
+    """
+    Same as preprocess_1 but with histogram equalization to enhance the contrasts of the image.
+    """
+    cropper = bp.FixedCrop(top=30, bottom=30)
+    masker = bp.LeeMask()
+    normalizer = bp.NoNormalization()
+    filter = bp.HistogramEqualization()
+    return cropper, masker, normalizer, filter
+
+def preprocess_3():
+    """
+    Same as preprocess_2 but with Huang normalization to normalize the image and mask (which should center them).
+    """
+    cropper = bp.FixedCrop(top=30, bottom=30)
+    masker = bp.LeeMask()
+    normalizer = bp.HuangNormalization()
+    filter = bp.HistogramEqualization()
+    return cropper, masker, normalizer, filter
+
+
+# Vein extraction functions
+def extract_rtl():
     """
     This extractor is a simple repeated line tracking algorithm that uses 1000 iterations and does not rescale the image.
-    https://www.idiap.ch/software/bob/docs/bob/docs/stable/bob/bob.bio.vein/doc/api.html#module-bob.bio.vein.extractor
+    https://www.idiap.ch/software/bob/docs/bob/docs/stable/bob/bob.bio.vein/doc/api.html#bob.bio.vein.extractor.RepeatedLineTracking
     """
-    return RepeatedLineTracking(iterations=1000, rescale=False)
+    # lower number of iterations because 3000 produce thick lines
+    return be.RepeatedLineTracking(iterations=1000, rescale=False)
 
-if __name__ == "__main__":
-    # Preprocessing transformations (uncomment one)
-    T = preprocess_1()
+def extract_mc():
+    """
+    This extractor is a simple maximum curvature algorithm.
+    https://www.idiap.ch/software/bob/docs/bob/docs/stable/bob/bob.bio.vein/doc/api.html#bob.bio.vein.extractor.MaximumCurvature
+    """
+    # lower the std. deviation of the Gaussian filter
+    # produces more separated dots around the main vein lines
+    return be.MaximumCurvature(sigma=3)
 
-    # Vein extraction algorithm (uncomment one)
-    E = extract_1()
-
-    # Examples finger images to process
-    IMGS = [
-        "bestcase.bmp",     # Best lighting
-        "basic.bmp",        # Basic image
-        "uncentered.bmp",   # Image where the finger is not centered
-    ]
-    IMGS = [f"vein_imgs/{img}" for img in IMGS]
-    procimg = ImagePreprocessor()
-    extractor = VeinExtractor()
-
-    # Show picked transformations for each image
-    processed = []
-    for img in IMGS:
-        procimg.load_image(img)
-        processed_data = procimg.preprocess(*T)
-        # procimg.show_all_transformations()
-        processed.append((img, processed_data)) # Store the processed data for vein extraction
-
-    # Extract and display extracted veins for each preprocessed image
-    for (img_name, img_and_mask) in processed:
-        extractor.extract(E, img_and_mask)
-        extractor.show_veins(img_name)
+def extract_wl():
+    """
+    This extractor is a wide line detector algorithm.
+    https://www.idiap.ch/software/bob/docs/bob/docs/stable/bob/bob.bio.vein/doc/api.html#bob.bio.vein.extractor.WideLineDetector
+    """
+    # Cant get this to work nicely
+    return be.WideLineDetector(g=15, rescale=False)
