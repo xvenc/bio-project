@@ -6,10 +6,8 @@ if __name__ == "__main__":
     T = preprocess_2()
     # T = preprocess_3()
 
-    # Vein extraction algorithm (uncomment one)
-    # E = extract_rtl()
-    E = extract_mc()
-    # E = extract_wl()
+    # Vein extraction algorithms
+    E = [extract_rtl(), extract_mc(), extract_wl(), extract_pc()]
 
     # Examples finger images to process
     IMGS = [

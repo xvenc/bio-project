@@ -69,41 +69,46 @@ class VeinExtractor():
     def __init__(self):
         pass
 
-    def extract(self, extractor, img_and_mask):
-        """Extract veins from the given image and mask using the provided extractor function.
+    def extract(self, extractors, img_and_mask):
+        """Extract veins from the given image and mask using the provided extractor functions.
 
-        Extractor function must be one of the classes defined in bio.bob.vein, which can be found at:
+        Extractor functions must be one of the classes defined in bio.bob.vein, which can be found at:
         https://www.idiap.ch/software/bob/docs/bob/docs/stable/bob/bob.bio.vein/doc/api.html#module-bob.bio.vein.extractor
 
         Args:
-            extractor (callable): A callable class that takes an image and mask and returns the extracted veins.
+            extractors (list): A list of callable classes that take an image and mask and return the extracted veins.
             img_and_mask (tuple): A tuple containing the preprocessed image and mask.
 
         Returns:
-            veins: Extracted veins as a 2D NumPy array.
+            list: A list of extracted veins as 2D NumPy arrays.
         """
-        print("Extracting veins...")
         self.img_and_mask = img_and_mask
-        self.veins = extractor(img_and_mask)
-        return self.veins
+        self.ext_names = [ext.__class__.__name__ for ext in extractors]
+
+        print("Extracting veins using the following extractors:", self.ext_names)
+        self.extracted_veins_imgs = [extractor(img_and_mask) for extractor in extractors]
+
+        return self.extracted_veins_imgs
 
     def show_veins(self, img_name):
-        """Display the preprocessed image, mask, and extracted veins in a 1x3 grid using Matplotlib.
+        """Display the preprocessed image, mask, and extracted veins in a grid using Matplotlib.
 
         Args:
             img_name (str): The name of the image to be displayed as the overall title.
         """
-        fig, axes = plt.subplots(1, 3, figsize=(10, 5))
+        ext_len = len(self.ext_names)
+
+        fig, axes = plt.subplots(1 + (ext_len // 2) + (ext_len % 2), 2, figsize=(8, 6))
         fig.suptitle(f"{img_name}")
 
-        axes[0].imshow(self.img_and_mask[0], cmap='gray')
-        axes[0].set_title("Preprocessed Image")
+        axes[0][0].imshow(self.img_and_mask[0], cmap='gray')
+        axes[0][0].set_title("Preprocessed Image")
+        axes[0][1].imshow(self.img_and_mask[1], cmap='gray')
+        axes[0][1].set_title("Preprocessed Mask")
 
-        axes[1].imshow(self.img_and_mask[1], cmap='gray')
-        axes[1].set_title("Preprocessed Mask")
-
-        axes[2].imshow(self.veins, cmap='gray')
-        axes[2].set_title("Extracted Veins")
+        for i, (extracted_veins_img, ext_name) in enumerate(zip(self.extracted_veins_imgs, self.ext_names)):
+            axes[i // 2 + 1][i % 2].imshow(extracted_veins_img, cmap='gray')
+            axes[i // 2 + 1][i % 2].set_title(f"{ext_name} Veins")
 
         list(map(lambda ax: ax.axis('off'), axes.flatten()))
         plt.show()
@@ -166,4 +171,11 @@ def extract_wl():
     https://www.idiap.ch/software/bob/docs/bob/docs/stable/bob/bob.bio.vein/doc/api.html#bob.bio.vein.extractor.WideLineDetector
     """
     # Cant get this to work nicely
-    return be.WideLineDetector(g=15, rescale=False)
+    return be.WideLineDetector(threshold=3,g=35,rescale=False)
+
+def extract_pc():
+    """
+    This extractor is a principal curvature algorithm.
+    https://www.idiap.ch/software/bob/docs/bob/docs/stable/bob/bob.bio.vein/doc/api.html#bob.bio.vein.extractor.PrincipalCurvature
+    """
+    return be.PrincipalCurvature(sigma=3, threshold=4)
