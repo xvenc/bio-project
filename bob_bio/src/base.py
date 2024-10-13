@@ -85,7 +85,7 @@ class VeinExtractor():
         self.img_and_mask = img_and_mask
         self.ext_names = [ext.__class__.__name__ for ext in extractors]
 
-        print("Extracting veins using the following extractors:", self.ext_names)
+        # print("Extracting veins using the following extractors:", self.ext_names)
         self.extracted_veins_imgs = [extractor(img_and_mask) for extractor in extractors]
 
         return self.extracted_veins_imgs
