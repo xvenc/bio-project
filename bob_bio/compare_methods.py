@@ -1,3 +1,4 @@
+import os
 from src.base import *
 
 if __name__ == "__main__":
@@ -10,12 +11,7 @@ if __name__ == "__main__":
     E = [extract_rtl(), extract_mc(), extract_wl(), extract_pc()]
 
     # Examples finger images to process
-    IMGS = [
-        "bestcase.bmp",     # Best lighting
-        "basic.bmp",        # Basic image
-        "uncentered.bmp",   # Image where the finger is not centered
-    ]
-    IMGS = [f"vein_imgs/{img}" for img in IMGS]
+    IMGS = [f"vein_imgs/{img}" for img in os.listdir("vein_imgs")]
     procimg = ImagePreprocessor()
     extractor = VeinExtractor()
 
