@@ -21,10 +21,11 @@ class BobVeinImage(pw.PreprocessWrapper):
         self._initialize_preprocessing(image_path)
 
         # Do each function separately and store intermediate results
-        img = mask = None
+        img = self.image
+        mask = self.mask
         if self.cropper is not None:
-            img = self.cropper(self.image)
-            self.process_intermediate.append((img, self.mask)) # Mask does not change here
+            img = self.cropper(img)
+            self.process_intermediate.append((img, mask)) # Mask does not change here
 
         if self.masker is not None:
             mask = self.masker(img)
@@ -79,6 +80,14 @@ def preprocess_3():
     filter = bp.HistogramEqualization()
     return cropper, masker, normalizer, filter
 
+def preprocess_4():
+    """ Only LeeMask and HistogramEqualization """
+    cropper = None
+    masker = bp.LeeMask()
+    normalizer = None
+    filter = bp.HistogramEqualization()
+    return cropper, masker, normalizer, filter
+
 # Example vein extraction functions
 def extract_rtl():
     """
@@ -117,6 +126,7 @@ if __name__ == "__main__":
     # T = preprocess_1()
     T = preprocess_2()
     # T = preprocess_3()
+    # T = preprocess_4()
 
     # Vein extraction algorithms
     E = [extract_rtl(), extract_mc(), extract_wl(), extract_pc()]
@@ -132,10 +142,12 @@ if __name__ == "__main__":
     # Apply preprocessing transformations to each image
     processed = []
     for img in imgs:
+        print(f"Processing image: {img}")
         processed.append(iprep.apply_preprocessing(img))
         iprep.show()
 
     # Extract and display extracted veins for each preprocessed image
     for (img, mask) in processed:
+        print(f"Extracting veins from image using {[e.__class__.__name__ for e in E]}")
         extractor.extract(img, mask)
         extractor.show()
