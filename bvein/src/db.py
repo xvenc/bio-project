@@ -139,10 +139,11 @@ if __name__ == "__main__":
     print("\n".join(db.get_images_by_finger('001', 'left', 'index')))
 
     # Iterate through database and display images of hands (only 3 examples)
+    imgs_cnt = 0
     for subject, hand, finger, images in db:
         # Images can be iterated here and further processing can be done
-        print(images)
-        break
+        imgs_cnt += len(images)
+    print(f"Total images: {imgs_cnt}")
 
     # Get a single batch of (6) target and 10 non-target images
     random.seed(None) # Don't forget to set the random seed

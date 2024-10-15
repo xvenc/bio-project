@@ -1,60 +1,51 @@
 import src.db as db
-import src.image as image
-import src.extractor as extractor
-import matplotlib.pyplot as plt
+import src.preprocess_wrapper as pw
+import src.extraction_wrapper as ew
 
 import bob.bio.vein.preprocessor as bp
 import bob.bio.vein.extractor as be
 
-class BobVeinImage(image.BVeinImage):
-    def __init__(self):
-        super().__init__([])
+class BobVeinImage(pw.PreprocessWrapper):
+    # Overwrite the __init__ method to use bob's preprocessing functions with our image class methods
+    def __init__(self, croper, masker, normalizer, filter):
+        self.cropper = croper
+        self.masker = masker
+        self.normalizer = normalizer
+        self.filter = filter
+        self.process_func = [c for c in [croper, masker, normalizer, filter] if c is not None]
 
     # We need to overwrite preprocess since bob applies transformations in a specific order
     # and each transformation takes different parameters and returns diffrerent values
     # e.g some require image and mask, some only image, some return only image, some return image and mask
-    def preprocess(self, croper, masker, normalizer, filter):
-        """ Apply a series of preprocessing steps to the image based on bob library.
+    def apply_preprocessing(self, image_path):
+        self._initialize_preprocessing(image_path)
 
-        Args:
-            croper (callable): Crops the image - does not take mask as it is generated in masker function.
-            masker (callable): Extracts the mask of the finger from the image.
-            normalizer (callable): Normalizes the image and mask.
-            filter (callable): Applies additional filtering to the image.
+        # Do each function separately and store intermediate results
+        img = mask = None
+        if self.cropper is not None:
+            img = self.cropper(self.image)
+            self.process_intermediate.append((img, self.mask)) # Mask does not change here
 
-        Returns:
-            (img, mask): A tuple containing the processed image and mask.
-        """
-        self._cropped_img = croper(self.image)
-        self._mask = masker(self._cropped_img)
-        self._norm_img, self._norm_mask = normalizer(self._cropped_img, self._mask)
-        self._filtered_img = filter(self._norm_img, self._norm_mask)
-        return self._filtered_img, self._norm_mask
+        if self.masker is not None:
+            mask = self.masker(img)
+            self.process_intermediate.append((img, mask)) # Image does not change here
 
-    def show(self) -> None:
-        """Display a series of image transformations in a 2x3 grid using Matplotlib."""
-        _, axes = plt.subplots(2, 3, figsize=(10, 5))
+        if self.normalizer is not None:
+            img, mask = self.normalizer(img, mask)
+            self.process_intermediate.append((img, mask))
 
-        axes[0][0].imshow(self.image, cmap='gray')
-        axes[0][0].set_title("Original Image")
+        if self.filter is not None:
+            img = self.filter(img, mask)
+            self.process_intermediate.append((img, mask))
 
-        axes[0][1].imshow(self._cropped_img, cmap='gray')
-        axes[0][1].set_title("Cropped Image")
+        return img, mask
 
-        axes[0][2].imshow(self._mask, cmap='gray')
-        axes[0][2].set_title("Mask")
-
-        axes[1][0].imshow(self._norm_img, cmap='gray')
-        axes[1][0].set_title("Normalized Image")
-
-        axes[1][1].imshow(self._norm_mask, cmap='gray')
-        axes[1][1].set_title("Normalized Mask")
-
-        axes[1][2].imshow(self._filtered_img, cmap='gray')
-        axes[1][2].set_title("Filtered Image")
-
-        list(map(lambda ax: ax.axis('off'), axes.flatten()))
-        plt.show()
+class BobVeinExtractor(ew.ExtractionWrapper):
+    def extract(self, image, mask):
+        self.image = image
+        self.mask = mask
+        self.extracted_veins_imgs = [extractor((image, mask)) for extractor in self.extractor_funcs]
+        return self.extracted_veins_imgs
 
 # Example preprocessing functions
 def preprocess_1():
@@ -64,8 +55,8 @@ def preprocess_1():
     """
     cropper = bp.FixedCrop(top=30, bottom=30)
     masker = bp.LeeMask()
-    normalizer = bp.NoNormalization()
-    filter = bp.NoFilter()
+    normalizer = None
+    filter = None
     return cropper, masker, normalizer, filter
 
 def preprocess_2():
@@ -74,7 +65,7 @@ def preprocess_2():
     """
     cropper = bp.FixedCrop(top=30, bottom=30)
     masker = bp.LeeMask()
-    normalizer = bp.NoNormalization()
+    normalizer = None
     filter = bp.HistogramEqualization()
     return cropper, masker, normalizer, filter
 
@@ -130,8 +121,8 @@ if __name__ == "__main__":
     # Vein extraction algorithms
     E = [extract_rtl(), extract_mc(), extract_wl(), extract_pc()]
 
-    image_preprocessor = BobVeinImage()
-    vein_extractor = extractor.BVeinExtractor(E)
+    iprep = BobVeinImage(*T)
+    extractor = BobVeinExtractor(E)
     database = db.FingerVeinDatabase()
 
     # Select 3 random images from database
@@ -141,11 +132,10 @@ if __name__ == "__main__":
     # Apply preprocessing transformations to each image
     processed = []
     for img in imgs:
-        image_preprocessor.load_image(img)
-        processed.append(image_preprocessor.preprocess(*T))
-        image_preprocessor.show()
+        processed.append(iprep.apply_preprocessing(img))
+        iprep.show()
 
     # Extract and display extracted veins for each preprocessed image
-    for p in processed:
-        vein_extractor.extract(p)
-        vein_extractor.show()
+    for (img, mask) in processed:
+        extractor.extract(img, mask)
+        extractor.show()
