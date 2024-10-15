@@ -2,6 +2,8 @@
 
 ## How to run
 
+We are using environment variable to access the database - mention it here
+
 ## Examples
 
 ## Installation
