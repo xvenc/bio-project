@@ -88,14 +88,13 @@ class PreprocessWrapper():
 
 # Example usage:
 if __name__ == "__main__":
-    from db import FingerVeinDatabase
-    from preprocess.lee_mask import LeeMask, ModifiedLeeMask
-    from preprocess.cropper import Cropper
-    from preprocess.histogram import HistogramEqualization
+    from .db import FingerVeinDatabase
+    from .preprocess.lee_mask import LeeMask, ModifiedLeeMask
+    from .preprocess.histogram import HistogramEqualization
     database = FingerVeinDatabase()
 
     # Example 1 - chain preprocessing step (each one is applied to the result of the previous one)
-    preprocessing1 = [Cropper(30, 30, 0, 0), ModifiedLeeMask(mode='mode1'), HistogramEqualization()]
+    preprocessing1 = [ModifiedLeeMask(mode='mode1'), HistogramEqualization()]
     iprep = PreprocessWrapper(preprocessing1)
 
     for img in database.get_random_batch(3)["non_target"]:
