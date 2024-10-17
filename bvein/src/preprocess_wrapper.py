@@ -54,7 +54,7 @@ class PreprocessWrapper():
             if self.separate:
                 # Reset the image and mask to original for the next preprocessing step
                 image, mask = self.image, self.mask
-        return self.image, self.mask
+        return image, mask
 
     def _show_single_row(self, ax, image, mask, caption) -> None:
         """ Display the `image` and `mask` with `caption` in a single row defined by `ax`. """
