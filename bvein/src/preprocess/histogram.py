@@ -1,6 +1,6 @@
 import numpy as np
 import cv2
-from .preprocessor import BVeinPreprocessor
+from .template import BVeinPreprocessor
 from typing import Tuple
 
 class HistogramEqualization(BVeinPreprocessor):

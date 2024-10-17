@@ -2,18 +2,6 @@ import numpy as np
 from scipy.signal import fftconvolve
 
 class VeinMatcher():
-    def crop_model(self, model, mask):
-        """ Crop the model image using the mask values
-
-        Args:
-            model (np.ndarray): The model image
-            mask (np.ndarray): The mask image
-
-        Returns:
-            np.ndarray: The cropped model image
-        """
-        return model * mask
-
     def score(self, model, probe):
         """ Compute modified Miura score between the model and the probe
 

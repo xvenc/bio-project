@@ -1,7 +1,7 @@
 import ctypes, os
 import numpy as np
-from .extractor import BVeinExtractor
 from PIL import Image
+from .template import BVeinExtractor
 
 class RepeatedLineTracking(BVeinExtractor):
     def __init__(self, iterations=1000, r=1, profile_w=21):
@@ -24,7 +24,8 @@ class RepeatedLineTracking(BVeinExtractor):
         self._mask_file = os.path.join(tmp_dir, tmp_mask_file)
         self._extracted_file = os.path.join(tmp_dir, tmp_extracted_file)
 
-    def extract(self, image, mask):
+    def extract(self, image_and_mask):
+        image, mask = image_and_mask
         # Save image and mask into temporary files
         img = Image.fromarray(image)
         img = img.convert("L")

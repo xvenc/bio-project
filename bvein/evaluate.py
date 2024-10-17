@@ -2,17 +2,17 @@ import random, os
 from tqdm import tqdm
 
 import bob.bio.vein.algorithm as ba
-import bob.bio.vein.preprocessor as bp
-import bob.bio.vein.extractor as  be
-
-from bob.bio.vein.preprocessor.utils import draw_mask_over_image
-import matplotlib.pyplot as plt
+import bob.bio.vein.extractor as be
 
 from src.db import FingerVeinDatabase
-from src.preprocess.cropper import MaskCropper
-from bob_example_methods import BobVeinImage, BobVeinExtractor
-
 from src.match import VeinMatcher
+from src.preprocess_wrapper import PreprocessWrapper
+from src.extraction_wrapper import ExtractionWrapper
+
+from src.preprocess.lee_mask import LeeMask
+from src.preprocess.cropper import MaskCropper
+from src.preprocess.histogram import HistogramEqualization
+from src.extractors.RepeatedLineTracking import RepeatedLineTracking
 
 class Comparator():
     def __init__(self, matcher, name):
@@ -39,19 +39,6 @@ class Comparator():
 
     def get_scores(self):
         return (self.name, self.overall_target_scores, self.overall_non_target_scores)
-
-def extract_mc():
-    return be.MaximumCurvature(sigma=5)
-
-def extract_rtl(iter):
-    return be.RepeatedLineTracking(iterations=iter, rescale=False)
-
-def preprocess_pipeline():
-    cropper = None
-    masker = bp.LeeMask()
-    normalizer = None
-    filter = bp.HistogramEqualization()
-    return cropper, masker, normalizer, filter
 
 def save_extracted_run(exports, name):
     import pickle
@@ -82,7 +69,7 @@ def save_scores(comp_scores, filename):
             f.write(f"{" ".join(map(str, non_target))}\n")
 
 def extract(db, imgprep, extractor, N, batchsize, filename=None):
-    data_to_export = []
+    export_data = []
 
     # Get target and non-target images
     for i, batch in enumerate(db.get_random_batch_N(N, batchsize)):
@@ -93,30 +80,35 @@ def extract(db, imgprep, extractor, N, batchsize, filename=None):
         target = [imgprep.apply_preprocessing(img) for img in batch["target"]]
         non_target = [imgprep.apply_preprocessing(img) for img in batch["non_target"]]
 
-        # Extract the veins
-        target_ext = [extractor.extract(img, mask)[0] for (img, mask) in tqdm(target)]
-        non_target_ext = [extractor.extract(img, mask)[0] for (img, mask) in tqdm(non_target)]
+        # Extract the veins using using various extraction methods
+        target_ext = [extractor.extract(img_and_mask)[0] for img_and_mask in tqdm(target)]
+        non_target_ext = [extractor.extract(img_and_mask)[0] for img_and_mask in tqdm(non_target)]
 
         # Pick a random model from the target images
         single_target_idx = random.randint(0, 5)
+        # Save the picked target preprocessed image and mask (because it is used in MaskCropper)
+        single_target_image = target_ext[single_target_idx]
+        single_target_mask = target[single_target_idx][1]
 
         # Save all the data
-        data_to_export.append((target, non_target, target_ext, non_target_ext, single_target_idx))
+        export_data.append((target_ext, non_target_ext, single_target_image, single_target_mask))
 
-    save_extracted_run(data_to_export, filename)
+    save_extracted_run(export_data, filename)
 
 def evaluate(path):
     exported = load_extracted_run(path)
-    comparators = [Comparator(ba.MiuraMatch(), "miura_default"), Comparator(ba.MiuraMatch(cw=30, ch=30), "miura_30"), Comparator(VeinMatcher(), "proposed")]
+    comparators = [
+        Comparator(ba.MiuraMatch(), "miura_default"),
+        Comparator(ba.MiuraMatch(cw=30, ch=30), "miura_30"),
+        Comparator(VeinMatcher(), "proposed")
+    ]
 
     maskcropper = MaskCropper()
-    for target, _, target_ext, non_target_ext, single_target_idx in exported:
-        single_target_image = target_ext[single_target_idx]
-
+    for target_ext, non_target_ext, single_target_image, single_target_mask in exported:
         for i in range(len(comparators)):
             if i == len(comparators) - 1:
                 # Crop the image by the mask for the proposed method
-                single_target_image = maskcropper.preprocess(single_target_image, target[single_target_idx][1])[0]
+                single_target_image = maskcropper.preprocess(single_target_image, single_target_mask)[0]
             comparators[i].compare_target(single_target_image, target_ext)
             comparators[i].compare_non_target(single_target_image, non_target_ext)
 
@@ -124,29 +116,30 @@ def evaluate(path):
     return scores
 
 if __name__ == '__main__':
-    T = preprocess_pipeline()
-    E = [extract_rtl(400)]
+    T = [LeeMask()]
+    # Use just a single vein extraction method here
+    E = [be.MaximumCurvature()]
+    # E = [RepeatedLineTracking()]
 
-    imgprep = BobVeinImage(*T)
-    extractor = BobVeinExtractor(E)
+    imgprep = PreprocessWrapper(T)
+    extractor = ExtractionWrapper(E)
     db = FingerVeinDatabase()
 
     random.seed(42)
 
-    eval = False
+    eval = True
     eval_dir = "results"
 
-    method_description = "rtl_400"
-    runs = 30
-    batch_size = 6
+    extract_dir = "models/"
+    runs = 1
+    batch_size = 1
 
-    outfile = "_".join([method_description, str(runs), str(batch_size)])
+    outfile = "_".join(extractor.get_extractor_names() + [str(runs), str(batch_size)])
 
     if eval:
         # Only evaluate, no extraction
-        scores = evaluate(outfile)
-        print_scores(scores)
+        scores = evaluate(os.path.join(extract_dir, outfile))
         save_scores(scores, os.path.join(eval_dir, outfile))
     else:
         # Only extract, no evaluation
-        extract(db, imgprep, extractor, runs, batch_size, outfile)
+        extract(db, imgprep, extractor, runs, batch_size, os.path.join(extract_dir, outfile))

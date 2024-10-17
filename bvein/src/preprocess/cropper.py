@@ -1,5 +1,5 @@
 import numpy as np
-from .preprocessor import BVeinPreprocessor
+from .template import BVeinPreprocessor
 from typing import Tuple
 
 class Cropper(BVeinPreprocessor):

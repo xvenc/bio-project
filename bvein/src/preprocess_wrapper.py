@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os
 from PIL import Image
-from .preprocess.preprocessor import BVeinPreprocessor
+from .preprocess.template import BVeinPreprocessor
 from typing import Tuple, List
 
 class PreprocessWrapper():

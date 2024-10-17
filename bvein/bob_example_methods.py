@@ -1,11 +1,12 @@
 import src.db as db
-import src.preprocess_wrapper as pw
-import src.extraction_wrapper as ew
 
 import bob.bio.vein.preprocessor as bp
 import bob.bio.vein.extractor as be
 
-class BobVeinImage(pw.PreprocessWrapper):
+from src.preprocess_wrapper import PreprocessWrapper
+from src.extraction_wrapper import ExtractionWrapper
+
+class BobVeinImage(PreprocessWrapper):
     # Overwrite the __init__ method to use bob's preprocessing functions with our image class methods
     def __init__(self, croper, masker, normalizer, filter):
         self.cropper = croper
@@ -40,13 +41,6 @@ class BobVeinImage(pw.PreprocessWrapper):
             self.process_intermediate.append((img, mask))
 
         return img, mask
-
-class BobVeinExtractor(ew.ExtractionWrapper):
-    def extract(self, image, mask):
-        self.image = image
-        self.mask = mask
-        self.extracted_veins_imgs = [extractor((image, mask)) for extractor in self.extractor_funcs]
-        return self.extracted_veins_imgs
 
 # Example preprocessing functions
 def preprocess_1():
@@ -88,39 +82,6 @@ def preprocess_4():
     filter = bp.HistogramEqualization()
     return cropper, masker, normalizer, filter
 
-# Example vein extraction functions
-def extract_rtl():
-    """
-    Repeated line tracking algorithm
-    https://www.idiap.ch/software/bob/docs/bob/docs/stable/bob/bob.bio.vein/doc/api.html#bob.bio.vein.extractor.RepeatedLineTracking
-    """
-    # lower number of iterations because 3000 produce thick lines
-    return be.RepeatedLineTracking(iterations=600, rescale=False)
-
-def extract_mc():
-    """
-    Maximum curvature algorithm
-    https://www.idiap.ch/software/bob/docs/bob/docs/stable/bob/bob.bio.vein/doc/api.html#bob.bio.vein.extractor.MaximumCurvature
-    """
-    # lower the std. deviation of the Gaussian filter
-    # produces more separated dots around the main vein lines
-    return be.MaximumCurvature(sigma=3)
-
-def extract_wl():
-    """
-    Wide line detector algorithm
-    https://www.idiap.ch/software/bob/docs/bob/docs/stable/bob/bob.bio.vein/doc/api.html#bob.bio.vein.extractor.WideLineDetector
-    """
-    # Cant get this to work nicely
-    return be.WideLineDetector(threshold=3,g=35,rescale=False)
-
-def extract_pc():
-    """
-    Principal curvature
-    https://www.idiap.ch/software/bob/docs/bob/docs/stable/bob/bob.bio.vein/doc/api.html#bob.bio.vein.extractor.PrincipalCurvature
-    """
-    return be.PrincipalCurvature(sigma=3, threshold=4)
-
 if __name__ == "__main__":
     # Example preprocessing transformations (uncomment one)
     # T = preprocess_1()
@@ -129,10 +90,14 @@ if __name__ == "__main__":
     # T = preprocess_4()
 
     # Vein extraction algorithms
-    E = [extract_rtl(), extract_mc(), extract_wl(), extract_pc()]
+    # Descriptions can be found at https://www.idiap.ch/software/bob/docs/bob/docs/stable/bob/bob.bio.vein/doc/api.html
+    E = [be.RepeatedLineTracking(iterations=600, rescale=False),
+         be.MaximumCurvature(sigma=3),
+         be.WideLineDetector(threshold=3,g=35,rescale=False),
+         be.PrincipalCurvature(sigma=3, threshold=4)]
 
     iprep = BobVeinImage(*T)
-    extractor = BobVeinExtractor(E)
+    extractor = ExtractionWrapper(E)
     database = db.FingerVeinDatabase()
 
     # Select 3 random images from database
@@ -147,7 +112,7 @@ if __name__ == "__main__":
         iprep.show()
 
     # Extract and display extracted veins for each preprocessed image
-    for (img, mask) in processed:
-        print(f"Extracting veins from image using {[e.__class__.__name__ for e in E]}")
-        extractor.extract(img, mask)
+    print(f"Extracting veins from image using {[e.__class__.__name__ for e in E]}")
+    for img_and_mask in processed:
+        extractor.extract(img_and_mask)
         extractor.show()

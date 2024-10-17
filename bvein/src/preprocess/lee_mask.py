@@ -1,5 +1,5 @@
 import numpy as np
-from .preprocessor import BVeinPreprocessor
+from .template import BVeinPreprocessor
 from scipy.ndimage import convolve
 from typing import Tuple
 
