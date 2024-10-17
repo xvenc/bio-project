@@ -75,8 +75,7 @@ if __name__ == "__main__":
     datafile = find_file("rtl 200")
 
     # To display ROC and DET for a specific matcher across multiple files
-    # datafile = [find_file(x) for x in ["rtl 200", "rtl 400", "rtl 600", "rtl 800"]]
-    # datafile = [find_file(x) for x in ["mc5 10", "mc5 6"]]
+    datafile = [find_file(x) for x in ["mc5 10", "mc5 6", "rtl 200"]]
 
     if type(datafile) == str:
         process_single_file(datafile)
