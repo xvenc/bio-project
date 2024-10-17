@@ -1,99 +1,152 @@
-import bvein.src.image as image
-from random import seed
+import random, os
 from tqdm import tqdm
-from datetime import datetime
 
-import matplotlib.pyplot as plt
 import bob.bio.vein.algorithm as ba
+import bob.bio.vein.preprocessor as bp
+import bob.bio.vein.extractor as  be
 
-from bvein.src.db import FingerVeinDatabase
+from bob.bio.vein.preprocessor.utils import draw_mask_over_image
+import matplotlib.pyplot as plt
 
-def custom_preprocess():
-    """ Custom preprocessing steps """
-    cropper = bp.NoCrop()
+from src.db import FingerVeinDatabase
+from src.preprocess.cropper import MaskCropper
+from bob_example_methods import BobVeinImage, BobVeinExtractor
+
+from src.match import VeinMatcher
+
+class Comparator():
+    def __init__(self, matcher, name):
+        self.matcher = matcher
+        self.name = name
+        self.overall_target_scores = []
+        self.overall_non_target_scores = []
+
+    def _compare_veins(self, model, probes):
+        """ Compare the model against a list of probe images """
+        scores = []
+        for imgs in probes:
+            score = self.matcher.score(model, imgs)
+            scores.append(score)
+        return scores
+
+    def compare_target(self, model, probes):
+        scores = self._compare_veins(model, probes)
+        self.overall_target_scores.extend(scores)
+
+    def compare_non_target(self, model, probes):
+        scores = self._compare_veins(model, probes)
+        self.overall_non_target_scores.extend(scores)
+
+    def get_scores(self):
+        return (self.name, self.overall_target_scores, self.overall_non_target_scores)
+
+def extract_mc():
+    return be.MaximumCurvature(sigma=5)
+
+def extract_rtl(iter):
+    return be.RepeatedLineTracking(iterations=iter, rescale=False)
+
+def preprocess_pipeline():
+    cropper = None
     masker = bp.LeeMask()
-    normalizer = bp.NoNormalization()
+    normalizer = None
     filter = bp.HistogramEqualization()
     return cropper, masker, normalizer, filter
 
-def extract_veins(imgs):
-    """ Extract veins from a list of images """
-    extracted = []
-    for img in tqdm(imgs):
-        procimg.load_image(img)
-        processed_data = procimg.preprocess(*T)
-        extracted.append((img, extractor.extract(E, processed_data)[0]))
-    return extracted
+def save_extracted_run(exports, name):
+    import pickle
+    with open(f"{name}.pkl", "wb") as f:
+        pickle.dump(exports, f)
 
-def show_interesting_veins(model, target_subopt, non_target_subopt):
-    """ Show the model and some interesting target and non-target images """
-    def plot(row, data):
-        for i, d in enumerate(data):
-            axes[row][i].imshow(d[1], cmap='gray')
-            axes[row][i].set_title(d[0].split('/')[-1])
+def load_extracted_run(name):
+    import pickle
+    with open(f"{name}.pkl", "rb") as f:
+        return pickle.load(f)
 
-    _, axes = plt.subplots(3, 3, figsize=(8, 6))
+def print_scores(comp_scores):
+    for name, target, non_target in comp_scores:
+        target_sorted = sorted(target, reverse=True)
+        non_target_sorted = sorted(non_target, reverse=True)
+        print(f"{name} - target:")
+        for score in target_sorted:
+            print(f"\t{score}")
+        print(f"{name} - non-target:")
+        for score in non_target_sorted:
+            print(f"\t{score}")
 
-    axes[0][1].imshow(model, cmap='gray')
-    axes[0][1].set_title("Model")
+def save_scores(comp_scores, filename):
+    with open(filename, "w") as f:
+        for name, target, non_target in comp_scores:
+            f.write(f"{name}\n")
+            f.write(f"{" ".join(map(str, target))}\n")
+            f.write(f"{" ".join(map(str, non_target))}\n")
 
-    plot(1, target_subopt)
-    plot(2, non_target_subopt)
+def extract(db, imgprep, extractor, N, batchsize, filename=None):
+    data_to_export = []
 
-    list(map(lambda ax: ax.axis('off'), axes.flatten()))
-    plt.show()
+    # Get target and non-target images
+    for i, batch in enumerate(db.get_random_batch_N(N, batchsize)):
+        # Extract the veins from the images
+        print(f"Batch {i}")
 
-def compare_veins(model, probes):
-    """ Compare the model against a list of probe images """
-    mm = ba.MiuraMatch()
-    scores = []
-    for img, data in probes:
-        score = mm.score(model, data)
-        scores.append(("/".join(img.split('/')[-3:]), score))
+        # Preprocess the images
+        target = [imgprep.apply_preprocessing(img) for img in batch["target"]]
+        non_target = [imgprep.apply_preprocessing(img) for img in batch["non_target"]]
+
+        # Extract the veins
+        target_ext = [extractor.extract(img, mask)[0] for (img, mask) in tqdm(target)]
+        non_target_ext = [extractor.extract(img, mask)[0] for (img, mask) in tqdm(non_target)]
+
+        # Pick a random model from the target images
+        single_target_idx = random.randint(0, 5)
+
+        # Save all the data
+        data_to_export.append((target, non_target, target_ext, non_target_ext, single_target_idx))
+
+    save_extracted_run(data_to_export, filename)
+
+def evaluate(path):
+    exported = load_extracted_run(path)
+    comparators = [Comparator(ba.MiuraMatch(), "miura_default"), Comparator(ba.MiuraMatch(cw=30, ch=30), "miura_30"), Comparator(VeinMatcher(), "proposed")]
+
+    maskcropper = MaskCropper()
+    for target, _, target_ext, non_target_ext, single_target_idx in exported:
+        single_target_image = target_ext[single_target_idx]
+
+        for i in range(len(comparators)):
+            if i == len(comparators) - 1:
+                # Crop the image by the mask for the proposed method
+                single_target_image = maskcropper.preprocess(single_target_image, target[single_target_idx][1])[0]
+            comparators[i].compare_target(single_target_image, target_ext)
+            comparators[i].compare_non_target(single_target_image, non_target_ext)
+
+    scores = [comp.get_scores() for comp in comparators]
     return scores
 
 if __name__ == '__main__':
-    procimg = image.ImagePreprocessor()
-    extractor = image.VeinExtractor()
+    T = preprocess_pipeline()
+    E = [extract_rtl(400)]
 
-    # Best preprocessing and extraction methods
-    T = custom_preprocess()
-    E = [image.extract_mc()]
+    imgprep = BobVeinImage(*T)
+    extractor = BobVeinExtractor(E)
+    db = FingerVeinDatabase()
 
-    seed(datetime.now().timestamp())
+    random.seed(42)
 
-    DB_PATH = '/home/kali/shared/veindb' # This should be your path to the database root folder
+    eval = False
+    eval_dir = "results"
 
-    db = FingerVeinDatabase(DB_PATH)
-    # Get target and non-target images
-    # for batch in db.get_random_batch_N(10, 10):
+    method_description = "rtl_400"
+    runs = 30
+    batch_size = 6
 
+    outfile = "_".join([method_description, str(runs), str(batch_size)])
 
-    # model_name = random.choice(target)
-    # print("Model:", model_name)
-
-    # # Extract veins from target and non-target images
-    # target_ext = extract_veins(target)
-    # non_target_ext = extract_veins(non_target)
-
-    # # Pick a random model from the target images
-    # model_img = target_ext[target.index(model_name)][1]
-
-    # # Match the model against all target and non-target images
-    # target_scores = compare_veins(model_img, target_ext)
-    # non_target_scores = compare_veins(model_img, non_target_ext)
-
-    # # Sort the scores
-    # target_sorted = sorted(target_scores, key=lambda x: x[1], reverse=True)
-    # non_target_sorted = sorted(non_target_scores, key=lambda x: x[1], reverse=True)
-
-    # print("Target scores:")
-    # for img, score in target_sorted:
-    #     print(f"{img}: {score}")
-
-    # print("Non-target scores:")
-    # for img, score in non_target_sorted:
-    #     print(f"{img}: {score}")
-
-    # Show extracted veins of 3 lowest scoring target images and 3 highest scoring non-target images
-    # show_interesting_veins(model_img, target_sorted[-3:], non_target_sorted[:3])
+    if eval:
+        # Only evaluate, no extraction
+        scores = evaluate(outfile)
+        print_scores(scores)
+        save_scores(scores, os.path.join(eval_dir, outfile))
+    else:
+        # Only extract, no evaluation
+        extract(db, imgprep, extractor, runs, batch_size, outfile)
