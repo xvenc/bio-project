@@ -26,8 +26,8 @@ for i, batch in enumerate(db.get_random_batch_N(1, 2)):
     non_target = [imgprep.apply_preprocessing(img) for img in batch["non_target"]]
 
     # Extract the veins
-    target_ext = [extractors.extract(img, mask)[0] for (img, mask) in tqdm(target)]
-    non_target_ext = [extractors.extract(img, mask)[0] for (img, mask) in tqdm(non_target)]
+    target_ext = [extractors.extract(img_and_mask)[0] for (img_and_mask) in tqdm(target)]
+    non_target_ext = [extractors.extract(img_and_mask)[0] for (img_and_mask) in tqdm(non_target)]
 
     for img in target_ext + non_target_ext:
         plt.imshow(img, cmap="gray")
