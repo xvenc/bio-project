@@ -121,7 +121,10 @@ class ModifiedLeeMask(LeeMask):
         avg_height = self.get_avg_height(original_lee_mask[1])
 
         if self.mode == 'mode1':
-            return (img, self.adjust_columns_to_average_height(original_lee_mask[1], avg_height, self.batch_size))
+            mask = self.adjust_columns_to_average_height(original_lee_mask[1], avg_height, self.batch_size)
+            mask = np.flipud(mask)
+            mask = self.adjust_columns_to_average_height(mask, avg_height, self.batch_size)
+            return (img, np.flipud(mask))
         elif self.mode == 'mode2':
             return (img, self.adjust_columns_to_average_height_2(original_lee_mask[1], self.target_avg_height, self.batch_size, self.tolerance_percentage))
 
