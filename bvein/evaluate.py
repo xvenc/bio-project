@@ -1,8 +1,9 @@
-import random, os
+import random, os, argparse, pickle
+import numpy as np
 from tqdm import tqdm
 
 from bob.bio.vein.extractor.RepeatedLineTracking import RepeatedLineTracking as BobRepeatedLineTracking
-import bob.bio.vein.algorithm as ba
+from bob.bio.vein.algorithm.MiuraMatch import MiuraMatch
 
 from src.db import FingerVeinDatabase
 from src.match import VeinMatcher
@@ -15,60 +16,100 @@ from src.preprocess.histogram import HistogramEqualization
 from src.extractors.RepeatedLineTracking import RepeatedLineTracking
 
 class Comparator():
-    def __init__(self, matcher, name):
+    """ Class for comparing the extracted veins using a matcher """
+    def __init__(self, matcher, name: str) -> None:
+        """ Initialize the comparator with a matcher and a name
+
+        Args:
+            matcher: The matcher to use for comparing the images - must implement `score` method
+            name: The name of the comparator
+        """
         self.matcher = matcher
         self.name = name
         self.overall_target_scores = []
         self.overall_non_target_scores = []
 
-    def _compare_veins(self, model, probes):
-        """ Compare the model against a list of probe images """
+    def _compare_veins(self, model: np.ndarray, probes: list[np.ndarray]) -> list[float]:
+        """ Compare the model against a list of probe images
+
+        Args:
+            model: The model image to compare against
+            probes: The list of probe images to compare against
+
+        Returns:
+            A list of scores for each probe image
+        """
         scores = []
         for imgs in probes:
             score = self.matcher.score(model, imgs)
             scores.append(score)
         return scores
 
-    def compare_target(self, model, probes):
+    def compare_target(self, model: np.ndarray, probes: list[np.ndarray]) -> None:
+        """ Compare the model against the target images and store the scores
+
+        Args:
+            model: The model image to compare against
+            probes: The list of target images to compare
+        """
         scores = self._compare_veins(model, probes)
         self.overall_target_scores.extend(scores)
 
-    def compare_non_target(self, model, probes):
+    def compare_non_target(self, model: np.ndarray, probes: list[np.ndarray]) -> None:
+        """ Compare the model against the non-target images and store the scores
+
+        Args:
+            model: The model image to compare against
+            probes: The list of non-target images to compare
+        """
         scores = self._compare_veins(model, probes)
         self.overall_non_target_scores.extend(scores)
 
-    def get_scores(self):
+    def get_scores(self) -> tuple[str, list[float], list[float]]:
+        """ Get the scores for the comparator - target and non-target """
         return (self.name, self.overall_target_scores, self.overall_non_target_scores)
 
-def save_extracted_run(exports, name):
-    import pickle
-    with open(f"{name}.pkl", "wb") as f:
-        pickle.dump(exports, f)
+def save_extracted_run(exports: list, filename: str) -> None:
+    """ Save the extracted run (`exports`) to a file using pickle """
+    try:
+        with open(f"{filename}.pkl", "wb") as f:
+            pickle.dump(exports, f)
+    except FileNotFoundError:
+        print("The model could not be saved, please check the path")
+        exit(1)
 
-def load_extracted_run(name):
-    import pickle
-    with open(f"{name}.pkl", "rb") as f:
-        return pickle.load(f)
+def load_extracted_run(filename: str) -> list:
+    try:
+        with open(f"{filename}.pkl", "rb") as f:
+            return pickle.load(f)
+    except FileNotFoundError:
+        print("The provided run could not be loaded, please check the path")
+        exit(1)
 
-def print_scores(comp_scores):
-    for name, target, non_target in comp_scores:
-        target_sorted = sorted(target, reverse=True)
-        non_target_sorted = sorted(non_target, reverse=True)
-        print(f"{name} - target:")
-        for score in target_sorted:
-            print(f"\t{score}")
-        print(f"{name} - non-target:")
-        for score in non_target_sorted:
-            print(f"\t{score}")
-
-def save_scores(comp_scores, filename):
+def save_scores(comp_scores: list[str, list[float], list[float]], filename) -> None:
+    """ Save the scores to a file """
     with open(filename, "w") as f:
         for name, target, non_target in comp_scores:
             f.write(f"{name}\n")
             f.write(f"{" ".join(map(str, target))}\n")
             f.write(f"{" ".join(map(str, non_target))}\n")
 
-def extract(db, imgprep, extractor, N, batchsize, filename=None):
+def extract(db: FingerVeinDatabase, imgprep: PreprocessWrapper, extractor: ExtractionWrapper, N: int, batchsize: int, filename: str) -> None:
+    """ Extract the veins from the database and save the results to a file
+
+    Args:
+        db: The database to extract the images from
+        imgprep: The preprocessing wrapper to apply the preprocessing to the images
+        extractor: The extraction wrapper to extract the veins from the images
+        N: The overall number of runs to perform
+        batchsize: The batch size of non-target images used in each run
+        filename: The filename to save the results to
+    """
+    # Since this is usually a long process, check if we can save the results before starting
+    if not os.path.exists(os.path.dirname(filename)):
+        print("The file does not exist, please check the path")
+        exit(1)
+
     export_data = []
 
     # Get target and non-target images
@@ -95,13 +136,22 @@ def extract(db, imgprep, extractor, N, batchsize, filename=None):
 
     save_extracted_run(export_data, filename)
 
-def evaluate(path, comparators):
-    exported = load_extracted_run(path)
+def evaluate(filename: str, comparators: list[Comparator]) -> list:
+    """ Evaluate the extracted veins using the comparators
+
+    Args:
+        filename: The filename to load the extracted data from
+        comparators: The list of comparators to use for the evaluation
+
+    Returns:
+        A list of scores for each comparator
+    """
+    exported = load_extracted_run(filename)
 
     maskcropper = MaskCropper()
-    for target_ext, non_target_ext, single_target_image, single_target_mask in exported:
+    for target_ext, non_target_ext, single_target_image, single_target_mask in tqdm(exported):
         for i in range(len(comparators)):
-            if i == len(comparators) - 1:
+            if comparators[i].name == "proposed":
                 # Crop the image by the mask for the proposed method
                 single_target_image = maskcropper.preprocess(single_target_image, single_target_mask)[0]
             comparators[i].compare_target(single_target_image, target_ext)
@@ -110,14 +160,26 @@ def evaluate(path, comparators):
     scores = [comp.get_scores() for comp in comparators]
     return scores
 
+def parse_args():
+    """ Parse the arguments for the script """
+    descr = f"""Run evaluation tests on the vein extraction algorithms.
+    By default, the script will run the extraction and evaluation in sequence, storing the model in models/ directory and results in results/.
+    The script can be run in two modes: full and match. In the full mode, the script will run the extraction and evaluation.
+    In the match mode, the script will only run the matchers on the extracted data.
+    The file is deduced from the current configuration, but can be overwritten."""
+    parser = argparse.ArgumentParser(description=descr)
+    # Optional argument for running the matchers on the extracted data
+    parser.add_argument('-m', '--match', help='only run matchers on a file specified by configuration', default=False, action='store_true')
+    parser.add_argument('-f', '--file', help='specify file path directly instead of deducing it from current configuration')
+    args = parser.parse_args()
+    return args.match, args.file
+
 if __name__ == '__main__':
-    random.seed(420)
+    random.seed(0)
 
-    eval_dir = "results"
-    extract_dir = "models"
-
-    runs = 50
-    batch_size = 30
+    # Define the configuration - this will be used to generate the model and results filenames
+    runs = 1
+    batch_size = 1
     iterations = 1000
     additional_names = ""
 
@@ -129,12 +191,9 @@ if __name__ == '__main__':
     E = [RepeatedLineTracking(iterations=iterations)]
 
     # Define comparators
-    # C = [
-    #     Comparator(ba.MiuraMatch(), "miura_default"),
-    #     Comparator(ba.MiuraMatch(cw=30, ch=30), "miura_30"),
-    #     Comparator(VeinMatcher(), "proposed")
-    # ]
     C = [
+        Comparator(MiuraMatch(), "miura_default"),
+        Comparator(MiuraMatch(cw=30, ch=30), "miura_30"),
         Comparator(VeinMatcher(), "proposed")
     ]
 
@@ -142,10 +201,28 @@ if __name__ == '__main__':
     extractor = ExtractionWrapper(E)
     db = FingerVeinDatabase()
 
-    outfile = "_".join(extractor.get_extractor_names() + [str(runs), str(batch_size), str(iterations)])
-    if additional_names != "":
-        outfile += additional_names
+    match_only, filepath = parse_args()
 
-    extract(db, imgprep, extractor, runs, batch_size, os.path.join(extract_dir, outfile))
-    scores = evaluate(os.path.join(extract_dir, outfile), C)
-    save_scores(scores, os.path.join(eval_dir, outfile))
+    # Generate the filename, based on the configuration + used extractor
+    if filepath is None:
+        filepath = "_".join(extractor.get_extractor_names() + [str(runs), str(batch_size), str(iterations)])
+        if additional_names != "":
+            filepath += additional_names
+
+    eval_dir = "results"
+    extract_dir = "models"
+    extraction_file = os.path.join(extract_dir, filepath)
+    scores_file = os.path.join(eval_dir, filepath)
+
+    if not match_only:
+        print("Running in full mode\nStarting with veins extraction")
+        print(f"Extracting to {extraction_file}\n")
+        extract(db, imgprep, extractor, runs, batch_size, extraction_file)
+        print()
+
+    print("Starting with evaluation")
+    print(f"Evaluating {extraction_file}\n")
+    scores = evaluate(extraction_file, C)
+
+    print("\nSaving scores to", os.path.join(eval_dir, filepath))
+    save_scores(scores, scores_file)

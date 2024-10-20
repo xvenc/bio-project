@@ -1,19 +1,34 @@
-import os
+import os, argparse
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.metrics import det_curve, roc_curve, DetCurveDisplay, RocCurveDisplay
 
-RES_DIR = "results"
+def parse_args():
+    parser = argparse.ArgumentParser(description="Plot results of the evaluation script stored in results directory")
 
-def find_files(phrases: list[str]) -> list[str]:
-    """ List all files in the current directory which contain all the `phrases` in their name. """
-    phrases = phrases.split()
-    files = os.listdir(RES_DIR)
+    # Positional arguments for search phrases
+    parser.add_argument('include', nargs='*', help='Phrases which must be present in the results filename')
+
+    # Optional argument for exclusion phrases
+    parser.add_argument('-e', '--exclude', nargs='*', help='Phrases that the filename should not contain', default=[])
+
+    args = parser.parse_args()
+
+    if not args.include:
+        parser.error("No search phrases provided")
+
+    return args.include, args.exclude
+
+def find_files(path: str, include: list[str], exclude: list[str]) -> list[str]:
+    """ List all files in which contain all the `include` phrases but not the `exclude` phrases in their name. """
+    files = os.listdir(path)
     files_matched = []
     for file in files:
-        # Check if all phrases are in the file name
-        if any(phrase in file for phrase in phrases):
-            files_matched.append(os.path.join(RES_DIR, file))
+        # Check if filename contains includes any of the `include` phrases
+        if all(phrase in file for phrase in include):
+            # Check if filename does not contain any of the `exclude` phrases
+            if not any(phrase in file for phrase in exclude):
+                files_matched.append(os.path.join(RES_DIR, file))
     return files_matched
 
 def load_data(file_path: str) -> dict:
@@ -50,9 +65,10 @@ def roc(name: str, target_scores: list[float], non_target_scores: list[float], a
     fpr, tpr, thr = roc_curve(y_true, y_pred)
 
     best = np.argmax(tpr - fpr)
-    print(f"Best threshold for {name}: {thr[best]:.2f}")
-    print(f"Best TPR for {name}: {tpr[best]:.2f}")
-    print(f"Best FPR for {name}: {fpr[best]:.2f}")
+    print(f"{name}:")
+    print(f"\tBest TPR: {tpr[best]:.2f}")
+    print(f"\tBest FPR: {fpr[best]:.2f}")
+    print(f"\tBest threshold: {thr[best]:.2f}")
 
     # Display ROC curve
     RocCurveDisplay(fpr=fpr, tpr=tpr, estimator_name=name).plot(ax=axes)
@@ -103,7 +119,11 @@ def process_multiple_files(filenames: list, scores: list, matchers: list):
     _plot(filenames, scores, matchers, det)
 
 if __name__ == "__main__":
-    datafile = find_files("50 1000")
+    include, exclude = parse_args()
+
+    # Hardcoded results directory
+    RES_DIR = "results"
+    datafile = find_files(RES_DIR, include, exclude)
 
     # Basically there are 2 modes of operation:
     # 1. Single file mode
@@ -111,8 +131,8 @@ if __name__ == "__main__":
     # 2. Multiple files mode
     #   - datafile is a list of strings, ROC and DET curves are plotted for all matchers found in all files in separate plots
 
-    if type(datafile) == str:
-        scores = load_data(datafile)
+    if len(datafile) == 1:
+        scores = load_data(datafile[0])
         matchers_found = list(scores.keys())
         process_single_file(scores, matchers_found)
     else:
