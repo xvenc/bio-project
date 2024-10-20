@@ -1,8 +1,8 @@
 import random, os
 from tqdm import tqdm
 
+from bob.bio.vein.extractor.RepeatedLineTracking import RepeatedLineTracking as BobRepeatedLineTracking
 import bob.bio.vein.algorithm as ba
-import bob.bio.vein.extractor as be
 
 from src.db import FingerVeinDatabase
 from src.match import VeinMatcher
@@ -95,13 +95,8 @@ def extract(db, imgprep, extractor, N, batchsize, filename=None):
 
     save_extracted_run(export_data, filename)
 
-def evaluate(path):
+def evaluate(path, comparators):
     exported = load_extracted_run(path)
-    comparators = [
-        Comparator(ba.MiuraMatch(), "miura_default"),
-        Comparator(ba.MiuraMatch(cw=30, ch=30), "miura_30"),
-        Comparator(VeinMatcher(), "proposed")
-    ]
 
     maskcropper = MaskCropper()
     for target_ext, non_target_ext, single_target_image, single_target_mask in exported:
@@ -116,30 +111,41 @@ def evaluate(path):
     return scores
 
 if __name__ == '__main__':
-    T = [LeeMask()]
-    # Use just a single vein extraction method here
-    E = [be.MaximumCurvature()]
-    # E = [RepeatedLineTracking()]
+    random.seed(420)
+
+    eval_dir = "results"
+    extract_dir = "models"
+
+    runs = 50
+    batch_size = 30
+    iterations = 1000
+    additional_names = ""
+
+    # Define preprocessing functions
+    T = [LeeMask(), HistogramEqualization()]
+
+    # Define vein extraction algorithm - always define single here
+    # E = [BobRepeatedLineTracking(iterations=800, rescale=False)]
+    E = [RepeatedLineTracking(iterations=iterations)]
+
+    # Define comparators
+    # C = [
+    #     Comparator(ba.MiuraMatch(), "miura_default"),
+    #     Comparator(ba.MiuraMatch(cw=30, ch=30), "miura_30"),
+    #     Comparator(VeinMatcher(), "proposed")
+    # ]
+    C = [
+        Comparator(VeinMatcher(), "proposed")
+    ]
 
     imgprep = PreprocessWrapper(T)
     extractor = ExtractionWrapper(E)
     db = FingerVeinDatabase()
 
-    random.seed(42)
+    outfile = "_".join(extractor.get_extractor_names() + [str(runs), str(batch_size), str(iterations)])
+    if additional_names != "":
+        outfile += additional_names
 
-    eval = True
-    eval_dir = "results"
-
-    extract_dir = "models/"
-    runs = 1
-    batch_size = 1
-
-    outfile = "_".join(extractor.get_extractor_names() + [str(runs), str(batch_size)])
-
-    if eval:
-        # Only evaluate, no extraction
-        scores = evaluate(os.path.join(extract_dir, outfile))
-        save_scores(scores, os.path.join(eval_dir, outfile))
-    else:
-        # Only extract, no evaluation
-        extract(db, imgprep, extractor, runs, batch_size, os.path.join(extract_dir, outfile))
+    extract(db, imgprep, extractor, runs, batch_size, os.path.join(extract_dir, outfile))
+    scores = evaluate(os.path.join(extract_dir, outfile), C)
+    save_scores(scores, os.path.join(eval_dir, outfile))
