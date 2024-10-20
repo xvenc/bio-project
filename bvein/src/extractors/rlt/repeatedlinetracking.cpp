@@ -195,7 +195,6 @@ extern "C" {
                 size_t index = std::distance(Vdepths.begin(), std::max_element(Vdepths.begin(), Vdepths.end()));
                 xc = Nc[index].x;
                 yc = Nc[index].y;
-                Vl = Vdepths[index];
             }
         }
 

@@ -3,7 +3,7 @@ import numpy as np
 from PIL import Image
 from .template import BVeinExtractor
 import cv2
-from skimage.morphology import skeletonize, binary_dilation, disk
+from skimage.morphology import skeletonize, binary_dilation, disk, binary_opening, remove_small_objects
 
 class RepeatedLineTracking(BVeinExtractor):
     def __init__(self, iterations=1000, r=1, profile_w=21):
@@ -25,7 +25,7 @@ class RepeatedLineTracking(BVeinExtractor):
         self._img_file = os.path.join(tmp_dir, tmp_img_file)
         self._mask_file = os.path.join(tmp_dir, tmp_mask_file)
         self._extracted_file = os.path.join(tmp_dir, tmp_extracted_file)
-    
+
     def skeletonize(self, img):
         # Convert the image to binary
         _, binary_image = cv2.threshold(img, 0, 1, cv2.THRESH_BINARY)
@@ -61,24 +61,24 @@ class RepeatedLineTracking(BVeinExtractor):
         vein_array_uint8 = np.clip(veins, 0, 255).astype(np.uint8)
 
         # Calculate the mean value as the threshold
-        mean_value = np.mean(vein_array_uint8)
+        median_value = np.median(vein_array_uint8[vein_array_uint8 > 0])
 
         # Binarize the image using cv2.threshold
-        _, binary_image = cv2.threshold(vein_array_uint8, mean_value, 1, cv2.THRESH_BINARY)
+        _, binary_image = cv2.threshold(vein_array_uint8, median_value, 1, cv2.THRESH_BINARY)
 
-        binary_image = binary_image.astype(np.uint8)
+        kernel = np.ones((2, 2), np.uint8)
+        binary_image = cv2.morphologyEx(binary_image, cv2.MORPH_CLOSE, kernel)
 
-        kernel = np.ones((1, 1), np.uint8)
-        binary_image = cv2.morphologyEx(binary_image, cv2.MORPH_OPEN, kernel)
+        # binary_image = remove_small_objects(binary_image.astype(bool), min_size=100, connectivity=2).astype(np.uint8)
+        # binary_image = binary_opening(binary_image, np.ones((3, 3))) # Opening - works better than no operation
 
-        #skeleton = self.skeletonize(binary_image)
-
-        #dilated = self.dilate(skeleton, disk_size=1)
-
-        return binary_image 
+        return binary_image
 
     def __del__(self):
-        # Remove temporary files
-        os.remove(self._img_file)
-        os.remove(self._mask_file)
-        os.remove(self._extracted_file)
+        try:
+            # Remove temporary files
+            os.remove(self._img_file)
+            os.remove(self._mask_file)
+            os.remove(self._extracted_file)
+        except Exception:
+            pass
