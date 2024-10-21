@@ -49,4 +49,5 @@ class ExtractionWrapper():
             axes[i // 2 + 1][i % 2].set_title(f"{ext_name} Veins")
 
         list(map(lambda ax: ax.axis('off'), axes.flatten()))
+        plt.tight_layout()
         plt.show()

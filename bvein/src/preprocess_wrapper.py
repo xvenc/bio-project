@@ -20,7 +20,7 @@ class PreprocessWrapper():
         self.process_func = preprocessing_functions
         self.separate = separate
 
-    def _load_image(self, image_path: str) -> None:
+    def _load_image(self, image_path: str) -> np.ndarray:
         """ Load and return grayscale image given its file path. """
         return np.asarray(Image.open(image_path).convert('L'))
 
@@ -84,6 +84,7 @@ class PreprocessWrapper():
                 self._show_single_row(axes[i+1], img, mask, caption)
 
         list(map(lambda ax: ax.axis('off'), axes.flatten()))
+        plt.tight_layout()
         plt.show()
 
 # Example usage:
