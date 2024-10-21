@@ -10,7 +10,7 @@ from src.match import VeinMatcher
 from src.preprocess_wrapper import PreprocessWrapper
 from src.extraction_wrapper import ExtractionWrapper
 
-from src.preprocess.lee_mask import LeeMask
+from src.preprocess.lee_mask import LeeMask, ModifiedLeeMask
 from src.preprocess.cropper import MaskCropper
 from src.preprocess.histogram import HistogramEqualization
 from src.extractors.RepeatedLineTracking import RepeatedLineTracking
@@ -79,15 +79,19 @@ def save_extracted_run(exports: list, filename: str) -> None:
         exit(1)
 
 def load_extracted_run(filename: str) -> list:
+    if ".pkl" not in filename:
+        filename += ".pkl"
     try:
-        with open(f"{filename}.pkl", "rb") as f:
+        with open(f"{filename}", "rb") as f:
             return pickle.load(f)
     except FileNotFoundError:
         print("The provided run could not be loaded, please check the path")
         exit(1)
 
-def save_scores(comp_scores: list[str, list[float], list[float]], filename) -> None:
+def save_scores(comp_scores: list[str, list[float], list[float]], filename: str) -> None:
     """ Save the scores to a file """
+    if ".pkl" in filename:
+        filename = filename.replace(".pkl", "")
     with open(filename, "w") as f:
         for name, target, non_target in comp_scores:
             f.write(f"{name}\n")
@@ -174,17 +178,23 @@ def parse_args():
     args = parser.parse_args()
     return args.match, args.file
 
+def make_dirs(dirs: list[str]) -> None:
+    """ Create directories if they do not exist """
+    for d in dirs:
+        if not os.path.exists(d):
+            os.makedirs(d)
+
 if __name__ == '__main__':
     random.seed(0)
 
     # Define the configuration - this will be used to generate the model and results filenames
-    runs = 1
-    batch_size = 1
+    runs = 50
+    batch_size = 30
     iterations = 1000
     additional_names = ""
 
     # Define preprocessing functions
-    T = [LeeMask(), HistogramEqualization()]
+    T = [ModifiedLeeMask(), HistogramEqualization()]
 
     # Define vein extraction algorithm - always define single here
     # E = [BobRepeatedLineTracking(iterations=800, rescale=False)]
@@ -192,9 +202,8 @@ if __name__ == '__main__':
 
     # Define comparators
     C = [
-        Comparator(MiuraMatch(), "miura_default"),
-        Comparator(MiuraMatch(cw=30, ch=30), "miura_30"),
-        Comparator(VeinMatcher(), "proposed")
+        Comparator(MiuraMatch(ch=30, cw=30), "MiuraMatch_30"),
+        Comparator(VeinMatcher(), "proposed"),
     ]
 
     imgprep = PreprocessWrapper(T)
@@ -203,16 +212,21 @@ if __name__ == '__main__':
 
     match_only, filepath = parse_args()
 
+    eval_dir = "results"
+    extract_dir = "models"
+
     # Generate the filename, based on the configuration + used extractor
     if filepath is None:
         filepath = "_".join(extractor.get_extractor_names() + [str(runs), str(batch_size), str(iterations)])
         if additional_names != "":
             filepath += additional_names
+        extraction_file = os.path.join(extract_dir, filepath)
+        scores_file = os.path.join(eval_dir, filepath)
+    else:
+        extraction_file = filepath
+        scores_file = os.path.join(eval_dir, os.path.basename(filepath))
 
-    eval_dir = "results"
-    extract_dir = "models"
-    extraction_file = os.path.join(extract_dir, filepath)
-    scores_file = os.path.join(eval_dir, filepath)
+    make_dirs([eval_dir, extract_dir])
 
     if not match_only:
         print("Running in full mode\nStarting with veins extraction")
