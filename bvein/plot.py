@@ -64,16 +64,17 @@ def roc(name: str, target_scores: list[float], non_target_scores: list[float], a
     y_pred = target_scores + non_target_scores
     fpr, tpr, thr = roc_curve(y_true, y_pred)
 
-    best = np.argmax(tpr - fpr)
+    fnr = 1 - tpr
+    best = np.nanargmin(np.absolute((fnr - fpr)))
+    eer_threshold = thr[best]
+    EER = fpr[best]
     print(f"{name}:")
-    print(f"\tBest TPR: {tpr[best]:.2f}")
-    print(f"\tBest FPR: {fpr[best]:.2f}")
-    print(f"\tBest threshold: {thr[best]:.2f}")
+    print(f"\tEER {EER:.2f}")
+    print(f"\tEER threshold: {eer_threshold:.2f}")
 
     # Display ROC curve
     RocCurveDisplay(fpr=fpr, tpr=tpr, estimator_name=name).plot(ax=axes)
-    axes.scatter(fpr[best], tpr[best], c='r', s=10)
-    axes.grid()
+    axes.scatter(fpr[best], tpr[best], c='black', s=10, zorder=10)
     axes.get_legend().remove()
 
 def det(name: str, target_scores: list[float], non_target_scores: list[float], axes) -> None:
@@ -83,12 +84,11 @@ def det(name: str, target_scores: list[float], non_target_scores: list[float], a
     fpr, fnr, _ = det_curve(y_true, y_pred)
 
     DetCurveDisplay(fpr=fpr, fnr=fnr, estimator_name=name).plot(ax=axes)
-    axes.grid()
     axes.get_legend().remove()
 
 def process_single_file(scores: dict, matchers: list) -> None:
     """ Process a single file and display the ROC and DET curves for all matchers found in the file in the same figure. """
-    fig, axes = plt.subplots(1, 2, figsize=(10, 7))
+    fig, axes = plt.subplots(1, 2)
     fig.suptitle(datafile)
 
     for name, (target_scores, non_target_scores) in scores.items():
