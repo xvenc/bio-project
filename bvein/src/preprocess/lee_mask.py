@@ -116,10 +116,14 @@ class ModifiedLeeMask(LeeMask):
 
     def __call__(self, img : np.ndarray, _mask : np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         original_lee_mask = self.preprocess(img, _mask)
-        avg_height = self.get_avg_height(original_lee_mask[1])
 
+        # Correct the upper part of the image
+        avg_height = self.get_avg_height(original_lee_mask[1])
         mask = self.adjust_columns_to_average_height(original_lee_mask[1], avg_height, self.batch_size)
+        # Flip mask vertically
         mask = np.flipud(mask)
+        # Correct the lower part of the image
+        avg_height = self.get_avg_height(mask)
         mask = self.adjust_columns_to_average_height(mask, avg_height, self.batch_size)
         return (img, np.flipud(mask))
 
