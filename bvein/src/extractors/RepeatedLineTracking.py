@@ -3,7 +3,7 @@ import numpy as np
 from PIL import Image
 from .template import BVeinExtractor
 import cv2
-from skimage.morphology import skeletonize, binary_dilation, disk, binary_opening, remove_small_objects
+from skimage.morphology import remove_small_objects
 
 class RepeatedLineTracking(BVeinExtractor):
     def __init__(self, iterations=1000, r=1, profile_w=21):
@@ -25,21 +25,6 @@ class RepeatedLineTracking(BVeinExtractor):
         self._img_file = os.path.join(tmp_dir, tmp_img_file)
         self._mask_file = os.path.join(tmp_dir, tmp_mask_file)
         self._extracted_file = os.path.join(tmp_dir, tmp_extracted_file)
-
-    def skeletonize(self, img):
-        # Convert the image to binary
-        _, binary_image = cv2.threshold(img, 0, 1, cv2.THRESH_BINARY)
-
-        # Apply the skeletonize function
-        skeleton = skeletonize(binary_image)
-
-        return skeleton
-
-    def dilate(self, img, disk_size=1):
-        # Apply binary dilation
-        dilated = binary_dilation(img, disk(disk_size))
-
-        return dilated
 
     def extract(self, image_and_mask):
         image, mask = image_and_mask
@@ -69,8 +54,12 @@ class RepeatedLineTracking(BVeinExtractor):
         kernel = np.ones((2, 2), np.uint8)
         binary_image = cv2.morphologyEx(binary_image, cv2.MORPH_CLOSE, kernel)
 
-        # binary_image = remove_small_objects(binary_image.astype(bool), min_size=100, connectivity=2).astype(np.uint8)
-        # binary_image = binary_opening(binary_image, np.ones((3, 3))) # Opening - works better than no operation
+        # Remove small objects
+        binary_image = remove_small_objects(binary_image.astype(bool), min_size=100, connectivity=2).astype(np.uint8)
+
+        # Apply binary opening
+        kernel = np.ones((3, 3), np.uint8)
+        binary_image = cv2.morphologyEx(binary_image, cv2.MORPH_OPEN, kernel)
 
         return binary_image
 
