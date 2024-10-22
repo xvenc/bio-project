@@ -2,15 +2,12 @@ import random, os, argparse, pickle
 import numpy as np
 from tqdm import tqdm
 
-from bob.bio.vein.extractor.RepeatedLineTracking import RepeatedLineTracking as BobRepeatedLineTracking
-from bob.bio.vein.algorithm.MiuraMatch import MiuraMatch
-
 from src.db import FingerVeinDatabase
 from src.match import VeinMatcher
 from src.preprocess_wrapper import PreprocessWrapper
 from src.extraction_wrapper import ExtractionWrapper
 
-from src.preprocess.lee_mask import LeeMask, ModifiedLeeMask
+from src.preprocess.lee_mask import ModifiedLeeMask
 from src.preprocess.cropper import MaskCropper
 from src.preprocess.histogram import HistogramEqualization
 from src.extractors.RepeatedLineTracking import RepeatedLineTracking
@@ -173,10 +170,13 @@ def parse_args():
     The file is deduced from the current configuration, but can be overwritten."""
     parser = argparse.ArgumentParser(description=descr)
     # Optional argument for running the matchers on the extracted data
-    parser.add_argument('-m', '--match', help='only run matchers on a file specified by configuration', default=False, action='store_true')
-    parser.add_argument('-f', '--file', help='specify file path directly instead of deducing it from current configuration')
+    parser.add_argument('-f', '--file', help='run only the matching methods on provided model stored in file')
+    parser.add_argument('-n', help='define number of tests to run', type=int, required=False, default=50)
+    parser.add_argument('-b', '--batchsize', help='define batchsize for each test', type=int, required=False, default=30)
+    parser.add_argument('-i', '--iterations', help='define number of iterations for RLT', type=int, required=False, default=800)
     args = parser.parse_args()
-    return args.match, args.file
+    assert(args.n > 0 and args.batchsize > 0 and args.iterations > 0)
+    return args.file, args.n, args.batchsize, args.iterations
 
 def make_dirs(dirs: list[str]) -> None:
     """ Create directories if they do not exist """
@@ -185,58 +185,75 @@ def make_dirs(dirs: list[str]) -> None:
             os.makedirs(d)
 
 if __name__ == '__main__':
-    random.seed(0)
+    random.seed(None)
 
-    # Define the configuration - this will be used to generate the model and results filenames
-    runs = 50
-    batch_size = 30
-    iterations = 1000
+    filepath, runs, batch_size, iterations = parse_args()
+    match_only = True if filepath else False
+
+    # This will be appended to the model name so you can use it to distinguish between different runs
     additional_names = ""
 
     # Define preprocessing functions
     T = [ModifiedLeeMask(), HistogramEqualization()]
 
-    # Define vein extraction algorithm - always define single here
-    # E = [BobRepeatedLineTracking(iterations=800, rescale=False)]
+    # In case of testing Bob RLT, import it here and change the name so its different to our RLT class name
+
+    # from bob.bio.vein.extractor.RepeatedLineTracking import RepeatedLineTracking as BobRLT
+    # BobRLT.__name__ = "BobRLT" # Change the name of the class to avoid confusion with our implementation
+    # E = [BobRLT(iterations=iterations, rescale=False)]
+
+    # Another example is to use our own implementation
     E = [RepeatedLineTracking(iterations=iterations)]
 
-    # Define comparators
+    # Define comparators - again for the Miura Match we need to import it
+
+    # from bob.bio.vein.algorithm.MiuraMatch import MiuraMatch
+    # C = [
+    #     Comparator(MiuraMatch(cw = 30, ch=30), "MiuraMatch_cw=ch=30"),
+    #     Comparator(MiuraMatch(), "MiuraMatch_default"),
+    #     Comparator(VeinMatcher(), "proposed")
+    # ]
+
+    # Or just use our own comparator
     C = [
-        Comparator(MiuraMatch(ch=30, cw=30), "MiuraMatch_30"),
-        Comparator(VeinMatcher(), "proposed"),
+        Comparator(VeinMatcher(), "proposed")
     ]
 
+    # Prepare db, preprocess and extractor
     imgprep = PreprocessWrapper(T)
     extractor = ExtractionWrapper(E)
     db = FingerVeinDatabase()
 
-    match_only, filepath = parse_args()
-
     eval_dir = "results"
     extract_dir = "models"
 
-    # Generate the filename, based on the configuration + used extractor
+    # Generate the filename, based on the configuration, used extractor, N, batchsize and additional names
     if filepath is None:
         filepath = "_".join(extractor.get_extractor_names() + [str(runs), str(batch_size), str(iterations)])
         if additional_names != "":
-            filepath += additional_names
+            filepath += "_" + additional_names
         extraction_file = os.path.join(extract_dir, filepath)
         scores_file = os.path.join(eval_dir, filepath)
     else:
         extraction_file = filepath
         scores_file = os.path.join(eval_dir, os.path.basename(filepath))
 
+    # Make sure the directories exist
     make_dirs([eval_dir, extract_dir])
 
+    # If models have not been provided, run the extraction
     if not match_only:
-        print("Running in full mode\nStarting with veins extraction")
+        print("Running in full mode\nStarting with veins extraction with parameters:")
+        print(f"Runs: {runs}\nBatch size: {batch_size}\nIterations: {iterations}")
         print(f"Extracting to {extraction_file}\n")
         extract(db, imgprep, extractor, runs, batch_size, extraction_file)
         print()
 
+    # Run the evaluation
     print("Starting with evaluation")
     print(f"Evaluating {extraction_file}\n")
     scores = evaluate(extraction_file, C)
 
-    print("\nSaving scores to", os.path.join(eval_dir, filepath))
+    # Store the results
+    print("\nSaving scores to", os.path.join(eval_dir, os.path.basename(filepath)))
     save_scores(scores, scores_file)

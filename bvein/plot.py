@@ -7,29 +7,14 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Plot results of the evaluation script stored in results directory")
 
     # Positional arguments for search phrases
-    parser.add_argument('include', nargs='*', help='Phrases which must be present in the results filename')
-
-    # Optional argument for exclusion phrases
-    parser.add_argument('-e', '--exclude', nargs='*', help='Phrases that the filename should not contain', default=[])
+    parser.add_argument('files', nargs='*', help='Files to plot the results from')
 
     args = parser.parse_args()
 
-    if not args.include:
-        parser.error("No search phrases provided")
+    if not args.files:
+        parser.error("No files provided")
 
-    return args.include, args.exclude
-
-def find_files(path: str, include: list[str], exclude: list[str]) -> list[str]:
-    """ List all files in which contain all the `include` phrases but not the `exclude` phrases in their name. """
-    files = os.listdir(path)
-    files_matched = []
-    for file in files:
-        # Check if filename contains includes any of the `include` phrases
-        if all(phrase in file for phrase in include):
-            # Check if filename does not contain any of the `exclude` phrases
-            if not any(phrase in file for phrase in exclude):
-                files_matched.append(os.path.join(RES_DIR, file))
-    return files_matched
+    return args.files
 
 def load_data(file_path: str) -> dict:
     """ Load the scores from a file.
@@ -38,25 +23,27 @@ def load_data(file_path: str) -> dict:
     the second line is the target scores, and the third line is the non-target scores.
     """
     scores = {}
-    with open(file_path, 'r') as f:
-        while True:
-            # Read three lines from the file
-            lines = [f.readline().strip() for _ in range(3)]
-            # Filter out empty strings (indicating EOF)
-            lines = [line for line in lines if line]
-            if not lines:  # If no lines were read, break the loop (EOF reached)
-                break
-            # Process the three lines
-            matcher_name = lines[0]
-            target_scores = [float(value) for value in lines[1].split()]
-            non_target_scores = [float(value) for value in lines[2].split()]
-            scores[matcher_name] = (target_scores, non_target_scores)
-    return scores
+    try:
+        f = open(file_path, 'r')
+    except FileNotFoundError:
+        print(f"File {file_path} not found")
+        exit(1)
 
-def display_shared_legend(fig, matchers_cnt: int) -> None:
-    """ Display a shared legend for all subplots in the figure. """
-    lines, labels = fig.axes[0].get_legend_handles_labels()
-    fig.legend(lines, labels, loc='lower center', fancybox=True, shadow=True, ncol=matchers_cnt)
+    while True:
+        # Read three lines from the file
+        lines = [f.readline().strip() for _ in range(3)]
+        # Filter out empty strings (indicating EOF)
+        lines = [line for line in lines if line]
+        if not lines:  # If no lines were read, break the loop (EOF reached)
+            break
+        # Process the three lines
+        matcher_name = lines[0]
+        target_scores = [float(value) for value in lines[1].split()]
+        non_target_scores = [float(value) for value in lines[2].split()]
+        scores[matcher_name] = (target_scores, non_target_scores)
+
+    f.close()
+    return scores
 
 def roc(name: str, target_scores: list[float], non_target_scores: list[float], axes) -> None:
     """ Calculate and display the ROC curve for the given scores. """
@@ -75,7 +62,6 @@ def roc(name: str, target_scores: list[float], non_target_scores: list[float], a
     # Display ROC curve
     RocCurveDisplay(fpr=fpr, tpr=tpr, estimator_name=name).plot(ax=axes)
     axes.scatter(fpr[best], tpr[best], c='black', s=10, zorder=10)
-    axes.get_legend().remove()
 
 def det(name: str, target_scores: list[float], non_target_scores: list[float], axes) -> None:
     """ Calculate and display the DET curve for the given scores. """
@@ -84,26 +70,26 @@ def det(name: str, target_scores: list[float], non_target_scores: list[float], a
     fpr, fnr, _ = det_curve(y_true, y_pred)
 
     DetCurveDisplay(fpr=fpr, fnr=fnr, estimator_name=name).plot(ax=axes)
-    axes.get_legend().remove()
+    axes.legend(loc='upper right')
 
-def process_single_file(scores: dict, matchers: list) -> None:
+def process_single_file(filename: str, scores: dict, matchers: list) -> None:
     """ Process a single file and display the ROC and DET curves for all matchers found in the file in the same figure. """
-    fig, axes = plt.subplots(1, 2)
-    fig.suptitle(datafile)
+    fig, axes = plt.subplots(1, 2, figsize=(10, 5))
+    fig.suptitle(filename)
 
     for name, (target_scores, non_target_scores) in scores.items():
         roc(name, target_scores, non_target_scores, axes[0])
         det(name, target_scores, non_target_scores, axes[1])
 
-    display_shared_legend(fig, len(matchers))
     plt.show()
 
 def process_multiple_files(filenames: list, scores: list, matchers: list):
     """ Process multiple files and display the ROC and DET curves for all matchers found in all files in separate figures. """
     def _plot(filenames, scores, matchers, fn):
-        fig, axes = plt.subplots(1, len(matchers), figsize=(14, 8))
+        _, axes = plt.subplots(1, len(matchers))
         for i, file in enumerate(filenames):
             file_scores = scores[i]
+            file = os.path.basename(file)
             for matcher_idx in range(len(matchers)):
                 target_scores, non_target_scores = file_scores[matchers[matcher_idx]]
                 if (len(matchers) == 1):
@@ -112,30 +98,24 @@ def process_multiple_files(filenames: list, scores: list, matchers: list):
                 else:
                     fn(file, target_scores, non_target_scores, axes[matcher_idx])
                     axes[matcher_idx].set_title(f"{matchers[matcher_idx]}")
-        display_shared_legend(fig, len(matchers))
         plt.show()
 
     _plot(filenames, scores, matchers, roc)
     _plot(filenames, scores, matchers, det)
 
 if __name__ == "__main__":
-    include, exclude = parse_args()
-
-    # Hardcoded results directory
-    RES_DIR = "results"
-    datafile = find_files(RES_DIR, include, exclude)
+    files = parse_args()
 
     # Basically there are 2 modes of operation:
-    # 1. Single file mode
-    #   - datafile is a string, ROC and DET curves are plotted for all matchers found in file in same plot
-    # 2. Multiple files mode
-    #   - datafile is a list of strings, ROC and DET curves are plotted for all matchers found in all files in separate plots
-
-    if len(datafile) == 1:
-        scores = load_data(datafile[0])
+    if len(files) == 1:
+        # there is a single datafile -> ROC and DET curves for all matchers found in file are plotted in same plot
+        filename = files[0]
+        scores = load_data(filename)
         matchers_found = list(scores.keys())
-        process_single_file(scores, matchers_found)
+        process_single_file(filename, scores, matchers_found)
     else:
-        scores = [load_data(file) for file in datafile]
+        # there are multiple datafiles -> ROC and DET curves are plotted for all matchers found in all files in separate plots
+        scores = [load_data(file) for file in files]
+        assert all(list(scores[0].keys()) == list(scores[i].keys()) for i in range(1, len(scores))), "All files should have the same matchers"
         matchers_found = list(scores[0].keys())
-        process_multiple_files(datafile, scores, matchers_found)
+        process_multiple_files(files, scores, matchers_found)
