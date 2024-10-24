@@ -54,12 +54,14 @@ class RepeatedLineTracking(BVeinExtractor):
         kernel = np.ones((2, 2), np.uint8)
         binary_image = cv2.morphologyEx(binary_image, cv2.MORPH_CLOSE, kernel)
 
-        # Remove small objects
-        binary_image = remove_small_objects(binary_image.astype(bool), min_size=100, connectivity=2).astype(np.uint8)
+        binary_image = remove_small_objects(binary_image.astype(bool), min_size=30).astype(np.uint8)
 
         # Apply binary opening
         kernel = np.ones((3, 3), np.uint8)
         binary_image = cv2.morphologyEx(binary_image, cv2.MORPH_OPEN, kernel)
+
+        # Remove small objects
+        binary_image = remove_small_objects(binary_image.astype(bool), min_size=50).astype(np.uint8)
 
         return binary_image
 
