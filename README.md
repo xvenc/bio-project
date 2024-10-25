@@ -33,7 +33,7 @@ chmod +x setup.sh
 After the installation of packages is complete, you need to specify database path, as the database is not included in the repository. You can do this by setting the `DB_PATH` environment variable to the path of the database.
 
 ```bash
-export DB_PATH=/path/to/your/database
+export BVEIN_DB=/path/to/your/database
 ```
 
 ## Examples
