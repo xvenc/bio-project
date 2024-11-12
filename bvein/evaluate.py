@@ -8,9 +8,10 @@ from src.preprocess_wrapper import PreprocessWrapper
 from src.extraction_wrapper import ExtractionWrapper
 
 from src.preprocess.lee_mask import ModifiedLeeMask
-from src.preprocess.cropper import MaskCropper
+from src.preprocess.cropper import MaskCropper, Cropper
 from src.preprocess.histogram import HistogramEqualization
 from src.extractors.RepeatedLineTracking import RepeatedLineTracking
+from src.extractors.gaborFilters import GaborFilters
 
 class Comparator():
     """ Class for comparing the extracted veins using a matcher """
@@ -184,6 +185,37 @@ def make_dirs(dirs: list[str]) -> None:
         if not os.path.exists(d):
             os.makedirs(d)
 
+def bob_rlt_extractor(iterations):
+    try:
+        from bob.bio.vein.extractor.RepeatedLineTracking import RepeatedLineTracking as BobRLT
+    except ImportError:
+        print("Bob library could not be imported")
+        exit(1)
+    BobRLT.__name__ = "BobRLT" # Change the name of the class to avoid confusion with our implementation
+    return [BobRLT(iterations=iterations, rescale=False)]
+
+def rlt_extractor(iterations):
+    return [RepeatedLineTracking(iterations=iterations)]
+
+def gabor_extractor(count=4):
+    return [GaborFilters(count=count)]
+
+def mixed_comparators():
+    try:
+        from bob.bio.vein.algorithm.MiuraMatch import MiuraMatch
+    except ImportError:
+        print("Bob library could not be imported")
+        exit(1)
+    C = [
+        Comparator(MiuraMatch(cw = 30, ch=30), "MiuraMatch_cw=ch=30"),
+        Comparator(MiuraMatch(), "MiuraMatch_default"),
+        Comparator(VeinMatcher(), "proposed")
+    ]
+    return C
+
+def proposed_comparator():
+    return [Comparator(VeinMatcher(), "proposed")]
+
 if __name__ == '__main__':
     random.seed(None)
 
@@ -194,30 +226,16 @@ if __name__ == '__main__':
     additional_names = ""
 
     # Define preprocessing functions
-    T = [ModifiedLeeMask(), HistogramEqualization()]
+    T = [ModifiedLeeMask(), MaskCropper(), HistogramEqualization()]
 
-    # In case of testing Bob RLT, import it here and change the name so its different to our RLT class name
+    # Define extraction methods (uncomment one)
+    # E = bob_rlt_extractor(iterations)
+    E = rlt_extractor(iterations)
+    # E = gabor_extractor()
 
-    # from bob.bio.vein.extractor.RepeatedLineTracking import RepeatedLineTracking as BobRLT
-    # BobRLT.__name__ = "BobRLT" # Change the name of the class to avoid confusion with our implementation
-    # E = [BobRLT(iterations=iterations, rescale=False)]
-
-    # Another example is to use our own implementation
-    E = [RepeatedLineTracking(iterations=iterations)]
-
-    # Define comparators - again for the Miura Match we need to import it
-
-    # from bob.bio.vein.algorithm.MiuraMatch import MiuraMatch
-    # C = [
-    #     Comparator(MiuraMatch(cw = 30, ch=30), "MiuraMatch_cw=ch=30"),
-    #     Comparator(MiuraMatch(), "MiuraMatch_default"),
-    #     Comparator(VeinMatcher(), "proposed")
-    # ]
-
-    # Or just use our own comparator
-    C = [
-        Comparator(VeinMatcher(), "proposed")
-    ]
+    # Define comparators (uncomment one)
+    # C = mixed_comparators()
+    C = proposed_comparator()
 
     # Prepare db, preprocess and extractor
     imgprep = PreprocessWrapper(T)

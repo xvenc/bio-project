@@ -47,8 +47,7 @@ class GaborFilters(BVeinExtractor):
 
     def plot_filters(self) -> None:
         # Plot the filters
-        fig, axes = plt.subplots(1, len(self.filters))
-        fig.suptitle("Filter Bank")
+        _, axes = plt.subplots(1, len(self.filters))
         for i, kern in enumerate(self.filters):
             axes[i].imshow(np.real(kern), cmap="gray")
             axes[i].axis("off")
@@ -60,14 +59,23 @@ class GaborFilters(BVeinExtractor):
         # Store the filtered images and the accumulative image for later use
         self.fimgs = []
         self.accums = []
+        self.accums_colored = []
 
         # Accumulative image of the best filter responses
         accum = np.zeros_like(img)
-        for kern in self.filters:
+
+        # Colored accumulative image
+        colors = [np.array([1, 0, 0]), np.array([0, 1, 0]), np.array([0, 0, 1]), np.array([1, 1, 0])]
+        h, w = img.shape
+        accum_colored = np.zeros((h, w, 3), dtype=np.uint8)
+
+        for i, kern in enumerate(self.filters):
             fimg = cv2.filter2D(img, cv2.CV_8UC3, kern)
+            accum_colored[np.where(fimg > accum)] = fimg[fimg > accum][:, None] * colors[i]
             accum = np.maximum(accum, fimg)
             self.fimgs.append(fimg)
             self.accums.append(accum)
+            self.accums_colored.append(accum_colored.copy())
 
         return accum
 
@@ -100,12 +108,15 @@ class GaborFilters(BVeinExtractor):
         return image
 
     def show(self) -> None:
-        _, axes = plt.subplots(len(self.fimgs), 2, figsize=(15, 10))
+        _, axes = plt.subplots(len(self.fimgs) + 1, 3)
+
+        axes[0][1].imshow(self._image_and_mask[0], cmap="gray")
 
         # Show the filtered images and the accumulative images
-        for i, (img, accum) in enumerate(zip(self.fimgs, self.accums)):
+        for i, (img, accum, accum_colored) in enumerate(zip(self.fimgs, self.accums, self.accums_colored), start=1):
             axes[i][0].imshow(img, cmap="gray")
             axes[i][1].imshow(accum, cmap="gray")
+            axes[i][2].imshow(accum_colored)
 
         list(map(lambda x: x.axis("off"), axes.flatten()))
         plt.tight_layout()

@@ -51,8 +51,8 @@ python evaluate.py -n 5 -b 5
 ```
 
 This stores the model in `models/RepeatedLineTracking_5_5_800.pkl` and also stores the results in `results/RepeatedLineTracking_5_5_800` - by default the proposed matcher is used.
-If you wish to evaluate the same model but by using MiuraMatch, unfortunately you need to uncomment sections where the matcher is defined in the `evaluate.py` file. But the you can
-run it on the same model with:
+If you wish to evaluate the same model but by using MiuraMatch, you need to uncomment sections where the matcher is defined in the `evaluate.py` file. Then you can
+run it on the previously created model with:
 
 ```bash
 python evaluate.py -n 5 -b 5 -f models/RepeatedLineTracking_5_5_800.pkl
@@ -65,6 +65,8 @@ python plot.py results/RepeatedLineTracking_5_5_800
 ```
 
 Finally we have also included some of the results in the `results` folder, which you can plot by running the `plot.py` script.
-- to plot ROC of different matching methods: `python plot.py results/MatchingMethodsComparison`
-- to plot ROC of Bob RLT vs our implementation: `python plot.py results/BobRLT_50_30_800 results/RepeatedLineTracking_50_30_800 results/RepeatedLineTracking_50_30_1000_modified`
-- to plot ROC of different iteration counts in RLT: `python plot.py results/RepeatedLineTracking_50_30_800 results/RepeatedLineTracking_50_30_1000`
+- to plot ROC of different matching methods on the same model (Bob RLT): `python plot.py results/MatchingMethodsComparison`
+- to plot ROC of Bob RLT 800 iterations vs our implementation 1000 iterations: `python plot.py results/BobRLT_50_30_800 results/RepeatedLineTracking_50_30_800 results/RepeatedLineTracking_50_30_1000_modified`
+- to plot ROC of different iterations (800 vs 1000 iterations) in RLT: `python plot.py results/RepeatedLineTracking_50_30_800 results/RepeatedLineTracking_50_30_1000`
+- to plot ROC of our best model vs Bob RLT: `python plot.py results/RepeatedLineTracking_50_30_1000_modified_double_remove results/BobRLT_50_30_800`
+- to plot ROC of Gabor filter (4 vs 8 angles) vs RLT: `python plot.py results/GaborFilters_50_30_4 results/GaborFilters_50_30_8 results/BobRLT_50_30_800 results/RepeatedLineTracking_50_30_1000_modified_double_remove`

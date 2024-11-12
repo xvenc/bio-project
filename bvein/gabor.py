@@ -3,16 +3,13 @@ from src.preprocess_wrapper import PreprocessWrapper
 from src.extraction_wrapper import ExtractionWrapper
 
 from src.preprocess.lee_mask import ModifiedLeeMask
-from src.preprocess.cropper import MaskCropper, Cropper
+from src.preprocess.cropper import MaskCropper
 from src.preprocess.histogram import HistogramEqualization
 from src.extractors.gaborFilters import GaborFilters
 
-import random
-
-random.seed(10)
 
 preprocessing = [ModifiedLeeMask(), MaskCropper(), HistogramEqualization()]
-extractor = [GaborFilters(count=8)]
+extractor = [GaborFilters(count=4)]
 
 db = FingerVeinDatabase()
 imgprep = PreprocessWrapper(preprocessing)
