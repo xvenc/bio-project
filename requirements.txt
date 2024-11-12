@@ -1,5 +1,5 @@
 matplotlib==3.9.2
-numpy==2.1.2
+numpy==1.26.4 # To be compatible with bob.bio.vein
 opencv_python==4.10.0.84
 Pillow==11.0.0
 scikit_learn==1.5.2
